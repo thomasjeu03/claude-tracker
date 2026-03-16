@@ -58,6 +58,7 @@ struct LoginView: View {
                 // ── Logo
                 Image("claude-color")
                     .resizable()
+                    .scaledToFit()
                     .frame(width: 64, height: 64)
                     .clipShape(RoundedRectangle(cornerRadius: 18))
                     .shadow(color: .claudeOrange.opacity(0.35), radius: 12, y: 5)
@@ -205,46 +206,32 @@ struct DashboardView: View {
     // MARK: – Usage content
 
     private var usageContent: some View {
-        VStack(spacing: 10) {
-            // Today — large card
-            let todayTotal = vm.dashboardData?.periods[.today]?.totals.total ?? 0
-            let todayIn    = vm.dashboardData?.periods[.today]?.totals.input ?? 0
-            let todayOut   = vm.dashboardData?.periods[.today]?.totals.output ?? 0
+        let maxTokens = (vm.dashboardData?.periods[.thirtyDays]?.totals.input  ?? 0)
+                      + (vm.dashboardData?.periods[.thirtyDays]?.totals.output ?? 0)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("TODAY")
-                    .font(.system(size: 9.5, weight: .semibold))
-                    .foregroundColor(.secondary)
-                    .tracking(0.5)
-
-                Text(TokenFormatter.format(todayTotal))
-                    .font(.system(size: 32, weight: .heavy, design: .rounded))
-                    .foregroundColor(.claudeOrange)
-
-                HStack(spacing: 12) {
-                    Label(TokenFormatter.format(todayIn),  systemImage: "arrow.down")
-                    Label(TokenFormatter.format(todayOut), systemImage: "arrow.up")
-                }
-                .font(.system(size: 11))
-                .foregroundColor(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color.claudeOrange.opacity(0.08)))
-
-            // 7-day and 30-day mini cards
-            HStack(spacing: 8) {
-                PeriodMiniCard(
-                    label: "7 Days",
-                    tokens: vm.dashboardData?.periods[.sevenDays]?.totals.total ?? 0,
-                    cost:   vm.dashboardData?.periods[.sevenDays]?.costCents ?? 0
-                )
-                PeriodMiniCard(
-                    label: "30 Days",
-                    tokens: vm.dashboardData?.periods[.thirtyDays]?.totals.total ?? 0,
-                    cost:   vm.dashboardData?.periods[.thirtyDays]?.costCents ?? 0
-                )
-            }
+        return VStack(spacing: 8) {
+            PeriodRow(
+                label:    "Today",
+                input:    vm.dashboardData?.periods[.today]?.totals.input  ?? 0,
+                output:   vm.dashboardData?.periods[.today]?.totals.output ?? 0,
+                maxTokens: maxTokens,
+                cost:     vm.dashboardData?.periods[.today]?.costCents ?? 0,
+                accent:   true
+            )
+            PeriodRow(
+                label:    "7 Days",
+                input:    vm.dashboardData?.periods[.sevenDays]?.totals.input  ?? 0,
+                output:   vm.dashboardData?.periods[.sevenDays]?.totals.output ?? 0,
+                maxTokens: maxTokens,
+                cost:     vm.dashboardData?.periods[.sevenDays]?.costCents ?? 0
+            )
+            PeriodRow(
+                label:    "30 Days",
+                input:    vm.dashboardData?.periods[.thirtyDays]?.totals.input  ?? 0,
+                output:   vm.dashboardData?.periods[.thirtyDays]?.totals.output ?? 0,
+                maxTokens: maxTokens,
+                cost:     vm.dashboardData?.periods[.thirtyDays]?.costCents ?? 0
+            )
         }
         .padding(12)
     }
@@ -334,31 +321,104 @@ struct DashboardHeader: View {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MARK: – PERIOD MINI CARD
+// MARK: – PERIOD ROW WITH PROGRESS BAR
 // ─────────────────────────────────────────────────────────────────────────────
 
-struct PeriodMiniCard: View {
-    let label:  String
-    let tokens: Int
-    let cost:   Int
+struct PeriodRow: View {
+    let label:     String
+    let input:     Int
+    let output:    Int
+    let maxTokens: Int
+    let cost:      Int
+    var accent:    Bool = false
+
+    private var total: Int { input + output }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label.uppercased())
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundColor(.secondary)
-                .tracking(0.5)
+        VStack(alignment: .leading, spacing: 7) {
+            // Label + total + cost
+            HStack(alignment: .firstTextBaseline) {
+                Text(label.uppercased())
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .tracking(0.5)
+                Spacer()
+                Text(TokenFormatter.format(total))
+                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .foregroundColor(accent ? .claudeOrange : .primary)
+                if cost > 0 {
+                    Text(CostFormatter.format(cents: cost))
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+            }
 
-            Text(TokenFormatter.format(tokens))
-                .font(.system(size: 18, weight: .bold, design: .rounded))
+            // Progress bar
+            TokenProgressBar(input: input, output: output, maxTokens: maxTokens)
 
-            Text(CostFormatter.format(cents: cost))
-                .font(.system(size: 10))
-                .foregroundColor(.secondary)
+            // Legend
+            HStack(spacing: 10) {
+                HStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 2).fill(Color.claudeOrange)
+                        .frame(width: 8, height: 8)
+                    Text("\(TokenFormatter.format(input)) in")
+                }
+                HStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 2).fill(Color.indigo.opacity(0.7))
+                        .frame(width: 8, height: 8)
+                    Text("\(TokenFormatter.format(output)) out")
+                }
+            }
+            .font(.system(size: 10))
+            .foregroundColor(.secondary)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.04)))
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(accent ? Color.claudeOrange.opacity(0.07) : Color.primary.opacity(0.04))
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: – TOKEN PROGRESS BAR
+// ─────────────────────────────────────────────────────────────────────────────
+
+struct TokenProgressBar: View {
+    let input:     Int
+    let output:    Int
+    let maxTokens: Int
+
+    private var total: Int { input + output }
+    private var fillFraction: Double {
+        guard maxTokens > 0 else { return 0 }
+        return min(Double(total) / Double(maxTokens), 1.0)
+    }
+    private var inputFraction: Double {
+        guard total > 0 else { return 0.5 }
+        return Double(input) / Double(total)
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let barWidth = geo.size.width * fillFraction
+            ZStack(alignment: .leading) {
+                // Track
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.primary.opacity(0.08))
+                // Fill (input | output)
+                HStack(spacing: 0) {
+                    Rectangle()
+                        .fill(Color.claudeOrange)
+                        .frame(width: barWidth * inputFraction)
+                    Rectangle()
+                        .fill(Color.indigo.opacity(0.7))
+                        .frame(width: barWidth * (1 - inputFraction))
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+            }
+        }
+        .frame(height: 7)
     }
 }
 

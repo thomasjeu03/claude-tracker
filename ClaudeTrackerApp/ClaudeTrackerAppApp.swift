@@ -21,8 +21,10 @@ struct ClaudeTrackerApp: App {
                 .frame(width: 380)
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: "c.circle.fill")
-                    .symbolRenderingMode(.hierarchical)
+                Image("claude-color")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 18, height: 18)
                 // Show today's token count right in the menu bar
                 if let title = vm.trayTitle {
                     Text(title)
