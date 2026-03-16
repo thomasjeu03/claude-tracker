@@ -56,22 +56,11 @@ struct LoginView: View {
             VStack(spacing: 22) {
 
                 // ── Logo
-                ZStack {
-                    RoundedRectangle(cornerRadius: 18)
-                        .fill(
-                            LinearGradient(
-                                colors: [.claudeOrange, .claudeOrangeDark],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 64, height: 64)
-                        .shadow(color: .claudeOrange.opacity(0.35), radius: 12, y: 5)
-
-                    Image(systemName: "c.circle.fill")
-                        .font(.system(size: 34, weight: .bold))
-                        .foregroundColor(.white)
-                }
+                Image("claude-color")
+                    .resizable()
+                    .frame(width: 64, height: 64)
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .shadow(color: .claudeOrange.opacity(0.35), radius: 12, y: 5)
 
                 // ── Title
                 VStack(spacing: 5) {
