@@ -32,8 +32,8 @@ struct UsageResponse: Decodable {
 }
 
 struct UsageEntry: Decodable {
-    let start_time:                    String
-    let end_time:                      String
+    let start_time:                    String?
+    let end_time:                      String?
     let input_tokens:                  Int?
     let output_tokens:                 Int?
     let cache_read_input_tokens:       Int?
@@ -46,9 +46,25 @@ struct CostResponse: Decodable {
 }
 
 struct CostEntry: Decodable {
-    let start_time: String
-    let end_time:   String
-    let cost:       String?   // decimal string, value in cents (e.g. "1250" = $12.50)
+    let start_time: String?
+    let end_time:   String?
+    let costCents:  Int
+
+    enum CodingKeys: String, CodingKey { case start_time, end_time, cost }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        start_time = try c.decodeIfPresent(String.self, forKey: .start_time)
+        end_time   = try c.decodeIfPresent(String.self, forKey: .end_time)
+        // API may return cost as a decimal-cent String ("1250") or as a Double
+        if let s = try? c.decodeIfPresent(String.self, forKey: .cost) {
+            costCents = Int(s ?? "0") ?? 0
+        } else if let d = try? c.decodeIfPresent(Double.self, forKey: .cost) {
+            costCents = Int(d)
+        } else {
+            costCents = 0
+        }
+    }
 }
 
 private struct AnthropicError: Decodable {
@@ -269,7 +285,7 @@ final class APIService {
 
         // Populate daily totals
         for entry in usage.data {
-            guard let d = parseDate(entry.start_time) else { continue }
+            guard let s = entry.start_time, let d = parseDate(s) else { continue }
             let entryDay = cal.startOfDay(for: d)
             if let idx = daily.firstIndex(where: { cal.isDate($0.date, inSameDayAs: entryDay) }) {
                 daily[idx].total += (entry.input_tokens ?? 0) + (entry.output_tokens ?? 0)
@@ -284,7 +300,7 @@ final class APIService {
 
             // Aggregate overall tokens
             for entry in usage.data {
-                guard let d = parseDate(entry.start_time), d >= range.start, d < range.end else { continue }
+                guard let s = entry.start_time, let d = parseDate(s), d >= range.start, d < range.end else { continue }
                 pd.totals.input       += entry.input_tokens                 ?? 0
                 pd.totals.output      += entry.output_tokens                ?? 0
                 pd.totals.cacheRead   += entry.cache_read_input_tokens      ?? 0
@@ -294,7 +310,7 @@ final class APIService {
             // Model breakdown
             var modelMap: [String: ModelUsage] = [:]
             for entry in byModel.data {
-                guard let d = parseDate(entry.start_time), d >= range.start, d < range.end else { continue }
+                guard let s = entry.start_time, let d = parseDate(s), d >= range.start, d < range.end else { continue }
                 let key = entry.model ?? "unknown"
                 var m   = modelMap[key] ?? ModelUsage(modelId: key)
                 m.input  += entry.input_tokens  ?? 0
@@ -305,8 +321,8 @@ final class APIService {
 
             // Costs
             for entry in costs.data {
-                guard let d = parseDate(entry.start_time), d >= range.start, d < range.end else { continue }
-                pd.costCents += Int(entry.cost ?? "0") ?? 0
+                guard let s = entry.start_time, let d = parseDate(s), d >= range.start, d < range.end else { continue }
+                pd.costCents += entry.costCents
             }
 
             data.periods[period] = pd

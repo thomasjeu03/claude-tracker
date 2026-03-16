@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import Charts
 
 // ─── Root dispatcher ─────────────────────────────────────────────────────────
 
@@ -52,7 +51,7 @@ struct LoginView: View {
     var body: some View {
         VStack(spacing: 0) {
             // drag region at top
-            Color.clear.frame(height: 10)
+            Color.clear.frame(height: 20)
 
             VStack(spacing: 22) {
 
@@ -151,16 +150,19 @@ struct LoginView: View {
                             HStack(spacing: 8) {
                                 ProgressView().scaleEffect(0.75)
                                 Text("Verifying…")
+                                    .foregroundColor(.white)
                             }
                         } else {
                             Text("Connect")
                                 .fontWeight(.semibold)
+                                .foregroundColor(vm.isLoading || keyInput.isEmpty ? .gray : .white)
                         }
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 36)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
+                .cornerRadius(.infinity)
                 .tint(.claudeOrange)
                 .disabled(vm.isLoading || keyInput.isEmpty)
                 .padding(.horizontal, 32)
@@ -196,7 +198,6 @@ struct DashboardView: View {
     var body: some View {
         VStack(spacing: 0) {
             DashboardHeader()
-            TabPicker()
 
             Group {
                 if vm.isLoading && vm.dashboardData == nil {
@@ -204,10 +205,7 @@ struct DashboardView: View {
                 } else if let err = vm.errorMessage, vm.dashboardData == nil {
                     errorView(err)
                 } else {
-                    ScrollView(.vertical, showsIndicators: false) {
-                        dashboardContent
-                            .padding(12)
-                    }
+                    usageContent
                 }
             }
 
@@ -215,38 +213,54 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: Content
+    // MARK: – Usage content
 
-    @ViewBuilder
-    private var dashboardContent: some View {
-        let pd = vm.dashboardData?.periods[vm.selectedPeriod]
-
+    private var usageContent: some View {
         VStack(spacing: 10) {
-            // Token totals
-            if let t = pd?.totals {
-                StatsRow(totals: t)
-                CacheRow(totals: t)
-            }
+            // Today — large card
+            let todayTotal = vm.dashboardData?.periods[.today]?.totals.total ?? 0
+            let todayIn    = vm.dashboardData?.periods[.today]?.totals.input ?? 0
+            let todayOut   = vm.dashboardData?.periods[.today]?.totals.output ?? 0
 
-            // Bar chart (not shown for "Today")
-            if vm.selectedPeriod != .today,
-               let daily = vm.dashboardData?.dailyData {
-                BarChartSection(data: daily, period: vm.selectedPeriod)
-            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("TODAY")
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .tracking(0.5)
 
-            // Model table
-            if let models = pd?.models, !models.isEmpty {
-                ModelTable(models: Array(models.prefix(6)))
-            }
+                Text(TokenFormatter.format(todayTotal))
+                    .font(.system(size: 32, weight: .heavy, design: .rounded))
+                    .foregroundColor(.claudeOrange)
 
-            // Empty state
-            if pd?.totals.total == 0 {
-                emptyState
+                HStack(spacing: 12) {
+                    Label(TokenFormatter.format(todayIn),  systemImage: "arrow.down")
+                    Label(TokenFormatter.format(todayOut), systemImage: "arrow.up")
+                }
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.claudeOrange.opacity(0.08)))
+
+            // 7-day and 30-day mini cards
+            HStack(spacing: 8) {
+                PeriodMiniCard(
+                    label: "7 Days",
+                    tokens: vm.dashboardData?.periods[.sevenDays]?.totals.total ?? 0,
+                    cost:   vm.dashboardData?.periods[.sevenDays]?.costCents ?? 0
+                )
+                PeriodMiniCard(
+                    label: "30 Days",
+                    tokens: vm.dashboardData?.periods[.thirtyDays]?.totals.total ?? 0,
+                    cost:   vm.dashboardData?.periods[.thirtyDays]?.costCents ?? 0
+                )
             }
         }
+        .padding(12)
     }
 
-    // MARK: States
+    // MARK: – States
 
     private var loadingView: some View {
         VStack(spacing: 14) {
@@ -278,19 +292,6 @@ struct DashboardView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity)
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "chart.bar.xaxis")
-                .font(.system(size: 26))
-                .foregroundColor(.secondary.opacity(0.4))
-            Text("No usage for this period")
-                .font(.system(size: 12))
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
     }
 }
 
@@ -344,249 +345,31 @@ struct DashboardHeader: View {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MARK: – TAB PICKER
+// MARK: – PERIOD MINI CARD
 // ─────────────────────────────────────────────────────────────────────────────
 
-struct TabPicker: View {
-    @EnvironmentObject var vm: AppViewModel
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(Period.allCases) { period in
-                Button(period.rawValue) {
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        vm.selectedPeriod = period
-                    }
-                }
-                .buttonStyle(PillButtonStyle(active: vm.selectedPeriod == period))
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-    }
-}
-
-struct PillButtonStyle: ButtonStyle {
-    let active: Bool
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 12, weight: .medium))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(active ? Color.claudeOrange : Color.clear)
-            )
-            .foregroundColor(active ? .white : .secondary)
-            .opacity(configuration.isPressed ? 0.8 : 1)
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MARK: – STAT CARDS
-// ─────────────────────────────────────────────────────────────────────────────
-
-struct StatsRow: View {
-    let totals: TokenTotals
-    var body: some View {
-        HStack(spacing: 7) {
-            StatCard(label: "Total",  value: TokenFormatter.format(totals.total),  accent: true)
-            StatCard(label: "Input",  value: TokenFormatter.format(totals.input))
-            StatCard(label: "Output", value: TokenFormatter.format(totals.output))
-        }
-    }
-}
-
-struct CacheRow: View {
-    let totals: TokenTotals
-    var body: some View {
-        HStack(spacing: 7) {
-            CacheCard(label: "Cache Read",  value: TokenFormatter.format(totals.cacheRead),   sub: "tokens saved")
-            CacheCard(label: "Cache Write", value: TokenFormatter.format(totals.cacheCreate), sub: "tokens written")
-        }
-    }
-}
-
-struct StatCard: View {
+struct PeriodMiniCard: View {
     let label:  String
-    let value:  String
-    var accent: Bool = false
+    let tokens: Int
+    let cost:   Int
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label)
+            Text(label.uppercased())
                 .font(.system(size: 9.5, weight: .semibold))
                 .foregroundColor(.secondary)
-                .textCase(.uppercase)
-                .tracking(0.4)
+                .tracking(0.5)
 
-            Text(value)
-                .font(.system(size: 20, weight: .heavy, design: .rounded))
-                .foregroundColor(accent ? .claudeOrange : .primary)
+            Text(TokenFormatter.format(tokens))
+                .font(.system(size: 18, weight: .bold, design: .rounded))
 
-            Text("tokens")
-                .font(.system(size: 9))
+            Text(CostFormatter.format(cents: cost))
+                .font(.system(size: 10))
                 .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.primary.opacity(0.04))
-        )
-    }
-}
-
-struct CacheCard: View {
-    let label: String
-    let value: String
-    let sub:   String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundColor(.indigo)
-                .textCase(.uppercase)
-                .tracking(0.4)
-
-            Text(value)
-                .font(.system(size: 15, weight: .bold, design: .rounded))
-                .foregroundColor(.indigo)
-
-            Text(sub)
-                .font(.system(size: 9))
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.indigo.opacity(0.07))
-        )
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MARK: – BAR CHART
-// ─────────────────────────────────────────────────────────────────────────────
-
-struct BarChartSection: View {
-    let data:   [DayData]
-    let period: Period
-
-    private var chartDays: [DayData] {
-        let count = period == .thirtyDays ? 30 : 7
-        return Array(data.suffix(count))
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionHeader("Daily Tokens")
-
-            Chart(chartDays) { day in
-                BarMark(
-                    x: .value("Date", day.date, unit: .day),
-                    y: .value("Tokens", day.total)
-                )
-                .foregroundStyle(
-                    day.isToday
-                        ? Color.claudeOrange
-                        : Color.claudeOrange.opacity(0.28)
-                )
-                .cornerRadius(3)
-            }
-            .chartXAxis {
-                let stride = period == .sevenDays ? 1 : 5
-                AxisMarks(values: .stride(by: .day, count: stride)) { value in
-                    if let date = value.as(Date.self) {
-                        AxisValueLabel {
-                            Text(
-                                period == .sevenDays
-                                    ? date.formatted(.dateTime.weekday(.narrow))
-                                    : "\(Calendar.current.component(.day, from: date))"
-                            )
-                            .font(.system(size: 9))
-                        }
-                    }
-                }
-            }
-            .chartYAxis(.hidden)
-            .chartXAxis(.automatic)
-            .frame(height: 64)
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MARK: – MODEL TABLE
-// ─────────────────────────────────────────────────────────────────────────────
-
-struct ModelTable: View {
-    let models: [ModelUsage]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionHeader("By Model")
-
-            VStack(spacing: 0) {
-                // Header row
-                HStack {
-                    Text("MODEL")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text("INPUT")
-                        .frame(width: 55, alignment: .trailing)
-                    Text("OUTPUT")
-                        .frame(width: 55, alignment: .trailing)
-                }
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundColor(.secondary)
-                .tracking(0.4)
-                .padding(.bottom, 5)
-
-                // Data rows
-                ForEach(models) { m in
-                    Divider()
-                    HStack {
-                        HStack(spacing: 6) {
-                            Text(m.displayName)
-                                .font(.system(size: 11.5, weight: .semibold))
-
-                            Text(m.tier.label)
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(tierColor(m.tier))
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1.5)
-                                .background(
-                                    Capsule()
-                                        .fill(tierColor(m.tier).opacity(0.12))
-                                )
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        Text(TokenFormatter.format(m.input))
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundColor(.secondary)
-                            .frame(width: 55, alignment: .trailing)
-
-                        Text(TokenFormatter.format(m.output))
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundColor(.secondary)
-                            .frame(width: 55, alignment: .trailing)
-                    }
-                    .padding(.vertical, 5)
-                }
-            }
-        }
-    }
-
-    private func tierColor(_ tier: ModelTier) -> Color {
-        switch tier.color {
-        case .orange: return .tierOpus
-        case .indigo: return .tierSonnet
-        case .green:  return .tierHaiku
-        }
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.04)))
     }
 }
 
@@ -597,29 +380,37 @@ struct ModelTable: View {
 struct DashboardFooter: View {
     @EnvironmentObject var vm: AppViewModel
 
-    private var costCents: Int {
-        vm.dashboardData?.periods[vm.selectedPeriod]?.costCents ?? 0
-    }
-
-    private var periodLabel: String {
-        switch vm.selectedPeriod {
-        case .today:      return "today"
-        case .sevenDays:  return "7-day"
-        case .thirtyDays: return "30-day"
-        }
+    private var todayCost: Int {
+        vm.dashboardData?.periods[.today]?.costCents ?? 0
     }
 
     var body: some View {
         HStack {
             HStack(spacing: 4) {
-                Text(CostFormatter.format(cents: costCents))
+                Text(CostFormatter.format(cents: todayCost))
                     .font(.system(size: 14, weight: .heavy, design: .rounded))
 
-                Text("\(periodLabel) cost")
+                Text("today's cost")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
             }
             Spacer()
+
+            Button {
+                NSApplication.shared.terminate(nil)
+            } label: {
+                HStack(spacing: 4) {
+                    Text("Quit")
+                        .font(.system(size: 11))
+                    Text("⌘Q")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundColor(.secondary)
+            .help("Quit app (⌘Q)")
+            .keyboardShortcut("q", modifiers: .command)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
@@ -627,21 +418,4 @@ struct DashboardFooter: View {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MARK: – REUSABLE COMPONENTS
-// ─────────────────────────────────────────────────────────────────────────────
-
-struct SectionHeader: View {
-    let title: String
-    init(_ title: String) { self.title = title }
-
-    var body: some View {
-        Text(title)
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundColor(.secondary)
-            .textCase(.uppercase)
-            .tracking(0.5)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
 
